@@ -15,6 +15,25 @@ It is built from scratch with Crawlee and Playwright and **does not call any Api
 
 Results are pushed to the dataset as soon as they are final, the same way Apify's own scrapers work. Businesses without a website are saved straight away. Progress is persisted, so runs survive migrations, and you get live status messages and a `RUN_SUMMARY` record in the key-value store.
 
+## Hunter.io enrichment (Stage 2.5)
+
+After the website crawl, each business website is reduced to its registrable domain
+(`https://www.shop.brightsmile.co.uk/about` → `brightsmile.co.uk`) and sent to Hunter's **Domain Search**.
+Hunter returns the people and emails it has indexed for that domain, with their position, seniority,
+department, LinkedIn and verification status. The scraper then:
+
+- picks the most senior named person (owner / founder / CEO / executive) as `ownerName` + `ownerEmail` when the website didn't reveal a confident owner,
+- keeps a website-found owner and uses Hunter (or the **Email Finder**, if `hunterFindOwnerEmail` is on) to get that person's email,
+- adds the remaining Hunter contacts to `otherDecisionMakers` and `allEmails`,
+- skips social pages and site builders (Facebook, Linktree, wixsite, business.site…) so no credits are wasted,
+- caches results per domain in the persisted state, so chains and resumed runs never pay twice,
+- stops cleanly on an invalid key or exhausted credits instead of failing the run.
+
+`hunterMode`: `fallback` (default) only calls Hunter when the website didn't already give a named owner with a personal email; `always` calls it for every website; `off` disables it.
+Set the key in the `hunterApiKey` input (stored as a secret) or the `HUNTER_API_KEY` environment variable.
+
+New output fields: `emailSource` (website / hunter), `emailPattern` (e.g. `{first}.{last}`), `ownerEmailStatus` (valid / accept_all / unknown), `hunterResults`.
+
 ## Input example
 
 ```json
@@ -28,6 +47,8 @@ Results are pushed to the dataset as soon as they are final, the same way Apify'
   "maxPagesPerWebsite": 4,
   "onlyWithEmail": false,
   "minLeadScore": 35,
+  "hunterApiKey": "YOUR_HUNTER_KEY",
+  "hunterMode": "fallback",
   "excludeKeywords": ["Walmart", "Shoppers Drug Mart"],
   "proxyConfiguration": { "useApifyProxy": true, "apifyProxyGroups": ["RESIDENTIAL"] }
 }

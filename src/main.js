@@ -3,6 +3,7 @@
  *
  * Stage 1  PlaywrightCrawler  → Google Maps search + place pages
  * Stage 2  CheerioCrawler     → each business website (home + about/team/contact pages)
+ * Stage 2.5 Hunter.io         → website domain → Domain Search (+ Email Finder for owners)
  * Stage 3  Merge + score      → one clean, CSV-ready lead per business in the dataset
  */
 import { Actor, log } from 'apify';
@@ -11,6 +12,7 @@ import { createMapsRouterHandlers, searchUrl, LABELS } from './maps.js';
 import { geocode, buildGrid } from './lib/geo.js';
 import { crawlWebsites } from './lib/siteCrawler.js';
 import { buildLead, passesFilters } from './lib/output.js';
+import { enrichWithHunter } from './lib/hunter.js';
 
 await Actor.init();
 
@@ -33,7 +35,15 @@ const input = {
     maxConcurrency: raw.maxConcurrency ?? 4,
     websiteMaxConcurrency: raw.websiteMaxConcurrency ?? 10,
     headless: raw.headless ?? true,
+    hunterApiKey: raw.hunterApiKey || process.env.HUNTER_API_KEY || null,
+    hunterMode: raw.hunterMode || 'fallback', // off | fallback | always
+    hunterFindOwnerEmail: raw.hunterFindOwnerEmail ?? true,
+    hunterLimit: raw.hunterLimit ?? 10,
 };
+if (input.hunterMode !== 'off' && !input.hunterApiKey) {
+    log.warning('No Hunter API key provided (input "hunterApiKey" or env HUNTER_API_KEY) — Hunter enrichment is off.');
+    input.hunterMode = 'off';
+}
 
 if (!input.searchTerms.length || !input.locations.length) {
     throw new Error('Please provide at least one search term (e.g. "dentist") and one location (e.g. "Toronto, ON").');
@@ -48,6 +58,7 @@ const state = await Actor.useState('LEADS_STATE', {
     places: {}, // placeKey -> place data
     sitePages: {}, // placeKey -> [page extraction]
     pushed: {}, // placeKey -> true
+    hunterCache: {}, // domain -> Hunter result (never pay twice for a domain)
     stats: { places: 0, pushed: 0, filtered: 0, closed: 0 },
 });
 
@@ -154,14 +165,30 @@ if (input.scrapeWebsites && withSite.length) {
         maxConcurrency: input.websiteMaxConcurrency,
         store: state.sitePages,
     });
+    // ---------------- Stage 2.5: Hunter.io (domain -> emails & people) ----------------
+    let enriched = sites;
+    if (input.hunterMode !== 'off') {
+        await Actor.setStatusMessage(`Hunter: looking up emails for ${withSite.length} domains…`);
+        const res = await enrichWithHunter(withSite, sites, {
+            apiKey: input.hunterApiKey,
+            mode: input.hunterMode,
+            findOwnerEmail: input.hunterFindOwnerEmail,
+            limit: input.hunterLimit,
+            cache: state.hunterCache,
+            log,
+            onProgress: (done, total) => Actor.setStatusMessage(`Hunter: ${done}/${total} domains`),
+        });
+        enriched = res.sites;
+        state.stats.hunter = res.stats;
+    }
     // ---------------- Stage 3: merge + score + push ----------------
-    for (const place of withSite) await pushLead(place, sites[place.placeKey] || null);
+    for (const place of withSite) await pushLead(place, enriched[place.placeKey] || null);
 }
 
 // Any leftovers (e.g. scrapeWebsites disabled mid-run)
 for (const place of Object.values(state.places)) await pushLead(place, null);
 
-const summary = { ...state.stats, finishedAt: new Date().toISOString(), input };
+const summary = { ...state.stats, finishedAt: new Date().toISOString(), input: { ...input, hunterApiKey: input.hunterApiKey ? '***' : null } };
 await Actor.setValue('RUN_SUMMARY', summary);
 await Actor.setStatusMessage(`Done: ${state.stats.pushed} leads saved (${state.stats.filtered} filtered out, ${state.stats.closed} closed skipped).`, { isStatusMessageTerminal: true });
 log.info('Summary', summary);

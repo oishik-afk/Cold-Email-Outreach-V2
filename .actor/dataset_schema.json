@@ -36,8 +36,8 @@
       "title": "All contact details",
       "transformation": {
         "fields": [
-          "businessName", "ownerName", "ownerEmail", "ownerLinkedIn", "ownerConfidence", "otherDecisionMakers",
-          "email", "emailType", "allEmails", "phone", "website", "facebook", "instagram", "linkedin", "twitter",
+          "businessName", "ownerName", "ownerTitle", "ownerEmail", "ownerEmailStatus", "ownerLinkedIn", "ownerSource",
+          "ownerConfidence", "otherDecisionMakers", "email", "emailType", "emailSource", "emailPattern", "allEmails", "phone", "website", "facebook", "instagram", "linkedin", "twitter",
           "youtube", "tiktok", "googleMapsUrl"
         ]
       },

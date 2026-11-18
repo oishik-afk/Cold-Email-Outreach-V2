@@ -336,6 +336,24 @@ export function prioritiseLinks(links, max) {
     return [...new Set(links)].sort((a, b) => rank(a) - rank(b) || a.length - b.length).slice(0, max);
 }
 
+/**
+ * Last resort: "jane.smith@brightsmile.ca" -> Jane Smith (low confidence).
+ * Only for personal emails on the business's own domain with a first.last style local part.
+ */
+export function ownerFromEmail(rankedEmails, websiteUrl) {
+    const domain = rootDomain(websiteUrl);
+    for (const e of rankedEmails) {
+        const [local, d] = e.split('@');
+        if (!domain || !(d === domain || d.endsWith(`.${domain}`) || domain.endsWith(`.${d}`))) continue;
+        if (emailType(e) !== 'personal') continue;
+        const parts = local.split(/[._-]/).filter((x) => /^[a-z]{2,20}$/.test(x));
+        if (parts.length !== 2 || parts.some((x) => NAME_STOPWORDS.has(x))) continue;
+        const name = parts.map((x) => x[0].toUpperCase() + x.slice(1)).join(' ');
+        return { name, title: null, email: e, source: 'email-address', confidence: 0.35, url: null };
+    }
+    return null;
+}
+
 /** Merge several page extractions for the same business website. */
 export function mergeSiteResults(pages, websiteUrl) {
     const emails = new Set();
@@ -364,5 +382,6 @@ export function mergeSiteResults(pages, websiteUrl) {
         const first = owner.name.replace(/^(Dr|Mr|Mrs|Ms)\.?\s+/i, '').split(' ')[0].toLowerCase();
         owner.email = ranked.find((e) => e.split('@')[0].includes(first)) || null;
     }
+    if (!owner) owner = ownerFromEmail(ranked, websiteUrl);
     return { emails: ranked, phones: [...phones], socials, owner, ownerCandidates: owners, audit, pagesVisited: pages.map((p) => p.url) };
 }

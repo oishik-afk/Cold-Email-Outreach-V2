@@ -72,6 +72,45 @@
       "minimum": 1,
       "maximum": 15
     },
+    "hunterApiKey": {
+      "title": "Hunter.io API key",
+      "type": "string",
+      "editor": "textfield",
+      "isSecret": true,
+      "description": "Get it at hunter.io → API. Each business website's domain is searched in Hunter to find emails and named decision-makers. Leave empty to skip Hunter (or set the HUNTER_API_KEY environment variable).",
+      "sectionCaption": "Hunter.io email finder"
+    },
+    "hunterMode": {
+      "title": "When to use Hunter",
+      "type": "string",
+      "editor": "select",
+      "default": "fallback",
+      "enum": [
+        "fallback",
+        "always",
+        "off"
+      ],
+      "enumTitles": [
+        "Only when the website gave no owner + personal email (saves credits)",
+        "Every website",
+        "Off"
+      ],
+      "description": "'fallback' skips domains where the website already revealed a named owner with a personal email."
+    },
+    "hunterFindOwnerEmail": {
+      "title": "Find owner's email with Email Finder",
+      "type": "boolean",
+      "default": true,
+      "description": "When the website names an owner but no email for them, ask Hunter's Email Finder for that person's address (uses extra credits)."
+    },
+    "hunterLimit": {
+      "title": "Max Hunter emails per domain",
+      "type": "integer",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 100,
+      "description": "Higher limits can cost more credits per search. 10 is plenty for small businesses."
+    },
     "onlyWithEmail": {
       "title": "Only save leads that have an email",
       "type": "boolean",
