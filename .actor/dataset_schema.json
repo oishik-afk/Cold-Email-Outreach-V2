@@ -19,6 +19,7 @@
           "ownerName",
           "ownerTitle",
           "email",
+          "emailPriority",
           "emailCount",
           "allEmails",
           "phone",
@@ -121,6 +122,10 @@
           "businessSize": {
             "label": "Business size",
             "format": "text"
+          },
+          "emailPriority": {
+            "label": "Email category",
+            "format": "text"
           }
         }
       }
@@ -146,6 +151,7 @@
           "otherDecisionMakers",
           "possibleNamedContacts",
           "email",
+          "emailPriority",
           "emailType",
           "emailSource",
           "emailPattern",
@@ -200,6 +206,10 @@
           },
           "businessSize": {
             "label": "Business size",
+            "format": "text"
+          },
+          "emailPriority": {
+            "label": "Email category",
             "format": "text"
           }
         }

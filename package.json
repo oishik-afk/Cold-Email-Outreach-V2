@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "node src/main.js",
-    "test": "node test/extract.test.js && node test/hunter.test.js && node test/maps.mock.test.js && node test/industry.test.js"
+    "test": "node test/extract.test.js && node test/hunter.test.js && node test/maps.mock.test.js && node test/industry.test.js && node test/emailPriority.test.js"
   },
   "dependencies": {
     "apify": "^3.2.6",

@@ -119,3 +119,9 @@ Copy the contents of this project into the cloned GitHub repository (preserve it
 Each lead includes `industry` (a broad sector), `industrySource` and `industryConfidence`. The classifier checks the Google Maps category first, then the search term; when neither matches, it uses `Other / Unclassified`. It does not assign official NAICS/NIC/NACE codes. You can see these columns in the main **Cold leads** dataset view.
 
 The Actor **can discover** local small and medium enterprises using relevant Google Maps search terms, but **cannot currently verify** MSME status. `msmeStatus` is `Not verified`, `businessSize` is `Unknown`, and `msmeEvidence` explains why. Official classifications differ by jurisdiction and normally require employee headcount, revenue/turnover, investment or registration evidence that Google Maps/Hunter do not provide. Do not infer MSME status from review count, number of branches or a small website.
+
+### Primary outreach email selection
+
+The `email` column now prioritizes **decision-maker addresses** (Hunter `decision_maker` or owner/leadership titles), then **named/person addresses**, then **generic company inboxes**. Among contacts in the same tier, valid verification and confidence improve ranking. Hunter contacts marked invalid are not selected as primary. The `emailPriority` output indicates `decision_maker`, `person`, or `generic`. The `allEmails` and `emailContacts` fields continue to retain all collected addresses without this filtering. The primary selection is made in `src/lib/emailPriority.js` and tested in `test/emailPriority.test.js`.
+
+Hunter results and owner labels are only as reliable as the supplied source metadata. If Hunter returns only a generic address, the generic inbox remains the primary email.

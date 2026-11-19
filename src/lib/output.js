@@ -4,6 +4,7 @@
 import { emailType } from './websiteExtract.js';
 import { scoreLead } from './scoring.js';
 import { classifyIndustry, assessMsme } from './industry.js';
+import { selectPrimaryEmail } from './emailPriority.js';
 
 export function buildLead(place, site, ctx = {}) {
     const owner = place.owner || site?.owner || null;
@@ -12,11 +13,12 @@ export function buildLead(place, site, ctx = {}) {
     const contacts = emails.map((email) => {
         const hunter = hunterContacts.find((p) => p.email === email);
         return { email, source: site?.emailSources?.[email] || (hunter ? 'hunter' : 'website'),
-            type: hunter?.type || emailType(email), name: hunter?.name || null,
-            title: hunter?.position || null, status: hunter?.verification || null,
+            type: hunter?.type || emailType(email), name: hunter?.name || (owner?.email?.toLowerCase() === email ? owner.name : null) || null,
+            title: hunter?.position || (owner?.email?.toLowerCase() === email ? owner.title : null) || null,
+            decisionMaker: hunter?.decisionMaker === true, status: hunter?.verification || null,
             confidence: hunter?.confidence ?? null, provenance: hunter?.provenance || null };
     });
-    const primaryEmail = (owner?.email && emails.includes(owner.email) ? owner.email : null) || emails[0] || null;
+    const { email: primaryEmail, priority: emailPriority } = selectPrimaryEmail(contacts, owner);
 
     const lead = {
         businessName: place.name || null,
@@ -31,7 +33,8 @@ export function buildLead(place, site, ctx = {}) {
         phone: place.phone || site?.phones?.[0] || null,
         email: primaryEmail,
         emailType: primaryEmail ? emailType(primaryEmail) : null,
-        emailSource: primaryEmail ? (site?.emailSources?.[primaryEmail] || 'website') : null,
+        emailSource: primaryEmail ? (contacts.find((c) => c.email === primaryEmail)?.source || 'website') : null,
+        emailPriority,
         allEmails: emails.join(', ') || null,
         emailCount: emails.length,
         emailAddresses: emails,
