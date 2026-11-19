@@ -161,12 +161,12 @@ export function extractOwners($, text, pageUrl) {
             const node = stack.pop();
             if (!node || typeof node !== 'object') continue;
             if (Array.isArray(node)) { stack.push(...node); continue; }
-            for (const key of ['founder', 'founders', 'owner', 'employee', 'employees', 'member', 'members', 'author']) {
+            for (const key of ['founder', 'founders', 'owner', 'employee', 'employees', 'member', 'members']) {
                 const v = node[key];
                 const list = Array.isArray(v) ? v : v ? [v] : [];
                 for (const p of list) {
-                    if (typeof p === 'string') add(p, key === 'author' ? null : key.replace(/s$/, ''), 'json-ld', key === 'author' ? 0.3 : 0.9);
-                    else if (p?.name) add(p.name, p.jobTitle || key.replace(/s$/, ''), 'json-ld', key === 'author' ? 0.3 : 0.9);
+                    if (typeof p === 'string' && ['founder', 'founders', 'owner'].includes(key)) add(p, key.replace(/s$/, ''), 'json-ld', 0.9);
+                    else if (p?.name && (['founder', 'founders', 'owner'].includes(key) || (p.jobTitle && new RegExp(TITLE_ALT, 'i').test(String(p.jobTitle))))) add(p.name, p.jobTitle || key.replace(/s$/, ''), 'json-ld', 0.9);
                 }
             }
             if (node['@type'] === 'Person' && node.name && node.jobTitle
@@ -382,6 +382,7 @@ export function mergeSiteResults(pages, websiteUrl) {
         const first = owner.name.replace(/^(Dr|Mr|Mrs|Ms)\.?\s+/i, '').split(' ')[0].toLowerCase();
         owner.email = ranked.find((e) => e.split('@')[0].includes(first)) || null;
     }
-    if (!owner) owner = ownerFromEmail(ranked, websiteUrl);
-    return { emails: ranked, phones: [...phones], socials, owner, ownerCandidates: owners, audit, pagesVisited: pages.map((p) => p.url) };
+    // An address such as jane.smith@ only establishes a possible contact, not ownership.
+    const emailContact = !owner ? ownerFromEmail(ranked, websiteUrl) : null;
+    return { emails: ranked, phones: [...phones], socials, owner, ownerCandidates: [...owners, ...(emailContact ? [emailContact] : [])], audit, pagesVisited: pages.map((p) => p.url) };
 }

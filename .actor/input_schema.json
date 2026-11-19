@@ -84,7 +84,7 @@
       "title": "When to use Hunter",
       "type": "string",
       "editor": "select",
-      "default": "fallback",
+      "default": "always",
       "enum": [
         "fallback",
         "always",
@@ -95,7 +95,7 @@
         "Every website",
         "Off"
       ],
-      "description": "'fallback' skips domains where the website already revealed a named owner with a personal email."
+      "description": "Always searches Hunter for all available domain emails up to max; fallback skips some complete-looking sites, so use Always to collect the widest set. Consumes Hunter credits."
     },
     "hunterFindOwnerEmail": {
       "title": "Find owner's email with Email Finder",
@@ -106,10 +106,10 @@
     "hunterLimit": {
       "title": "Max Hunter emails per domain",
       "type": "integer",
-      "default": 10,
+      "default": 100,
       "minimum": 1,
       "maximum": 100,
-      "description": "Higher limits can cost more credits per search. 10 is plenty for small businesses."
+      "description": "Hunter Domain Search API page size (1-100). Use 100 to retrieve more results per API call."
     },
     "onlyWithEmail": {
       "title": "Only save leads that have an email",
@@ -180,6 +180,14 @@
       "type": "boolean",
       "default": true,
       "description": "Run Chrome without a visible window. Keep enabled on Apify."
+    },
+    "hunterMaxEmails": {
+      "title": "Maximum Hunter emails per domain (all pages)",
+      "type": "integer",
+      "default": 100,
+      "minimum": 1,
+      "maximum": 1000,
+      "description": "Maximum total emails to retrieve per company. Hunter pages results with offset; higher caps can consume more API credits."
     }
   },
   "required": [

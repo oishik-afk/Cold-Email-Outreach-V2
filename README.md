@@ -100,3 +100,22 @@ Run locally with `npm install && apify run`. Outside the Apify image, set `CHROM
 ## Compliance
 
 Scraping public business listings is common practice, but Google's Terms of Service restrict automated access, so use reasonable volumes. For outreach, follow the law where the recipients are, such as **CASL** (Canada), **CAN-SPAM** (US) or **GDPR/PECR** (EU/UK). In general, contact role-relevant, publicly listed business addresses, identify yourself, and include a working unsubscribe.
+
+## Expanded email collection (updated)
+
+- Hunter mode defaults to **always** so every eligible domain is checked, even where an owner is already known. This may use more Hunter credits; choose `fallback` to save credits.
+- `hunterLimit` is the **page size** (1–100); `hunterMaxEmails` is the maximum total results across pages (default 100, maximum 1000). Domain Search uses `offset` pagination and caches the result by domain and page settings.
+- The default Apify **Cold leads** view now shows `emailCount` and `allEmails`; `email` is kept as the primary outreach email for backward compatibility. `emailAddresses` and `emailContacts` are structured dataset fields with sources and available Hunter metadata.
+- Hunter may provide only generic addresses (e.g. `info@`, `hr@`). This does **not** establish a named business owner. Website article authors and names inferred only from email usernames are no longer promoted as verified owners. `ownerName` stays empty where no supported owner evidence was found; potential names can appear among other contacts.
+- Each additional Hunter API page can use credits. This scraper cannot guarantee every email on the Internet or an owner name for every business. Hunter API coverage, site access, and public records determine availability.
+
+### Deploying the modified files
+
+Copy the contents of this project into the cloned GitHub repository (preserve its `.git` directory), review changes and secrets, run `npm install` and `npm test`, then commit and push. In the Apify Actor connected to that Git repository, rebuild the Actor and run a small test with `hunterMode: "always"`, `hunterLimit: 100`, `hunterMaxEmails: 100`. Enter the Hunter key via the Actor's secret input or `HUNTER_API_KEY` environment variable; never commit it to GitHub. Existing Apify datasets are not retroactively changed.
+
+
+## Industry and MSME information
+
+Each lead includes `industry` (a broad sector), `industrySource` and `industryConfidence`. The classifier checks the Google Maps category first, then the search term; when neither matches, it uses `Other / Unclassified`. It does not assign official NAICS/NIC/NACE codes. You can see these columns in the main **Cold leads** dataset view.
+
+The Actor **can discover** local small and medium enterprises using relevant Google Maps search terms, but **cannot currently verify** MSME status. `msmeStatus` is `Not verified`, `businessSize` is `Unknown`, and `msmeEvidence` explains why. Official classifications differ by jurisdiction and normally require employee headcount, revenue/turnover, investment or registration evidence that Google Maps/Hunter do not provide. Do not infer MSME status from review count, number of branches or a small website.

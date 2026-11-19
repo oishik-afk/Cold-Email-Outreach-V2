@@ -112,9 +112,40 @@ assert.equal(r429.sites.z.owner.name, 'Rahul Mehta', 'succeeded after retry');
 
 // ---- 6. Owner inferred from a first.last email when no name on the site ----
 const emailOnly = mergeSiteResults([{ ...extractFromHtml('<a href="mailto:sanjay.roy@roylaw.in">mail</a>', 'https://roylaw.in/'), url: 'https://roylaw.in/', isHomepage: true }], 'https://roylaw.in/');
-assert.equal(emailOnly.owner.name, 'Sanjay Roy');
-assert.equal(emailOnly.owner.source, 'email-address');
+assert.equal(emailOnly.owner, null, 'personal email alone is not proof of ownership');
+assert.equal(emailOnly.ownerCandidates.find((c) => c.source === 'email-address')?.name, 'Sanjay Roy');
 
 // applyHunter with no data leaves the site untouched
 assert.deepEqual(applyHunter(namedSite, null).owner, namedSite.owner);
 console.log('hunter tests passed ✔');
+
+// ---- 7. Complete collection: page through more than the default first 10 emails ----
+const pageCalls = [];
+const bristol = await enrichWithHunter(
+    [{ placeKey: 'bristol', name: 'Bristol Dental Clinic', website: 'https://bristoldental.ca' }],
+    { bristol: { emails: ['info@bristoldental.ca'], phones: [], socials: {}, owner: null, ownerCandidates: [] } },
+    { apiKey: 'test', mode: 'always', limit: 2, maxEmails: 10, log: quiet,
+        fetchImpl: async (url) => {
+            const u = new URL(url);
+            const offset = Number(u.searchParams.get('offset'));
+            pageCalls.push(offset);
+            const emails = offset === 0
+                ? [{ value: 'info@bristoldental.ca', type: 'generic' }, { value: 'hr@bristoldental.ca', type: 'generic' }]
+                : [{ value: 'appointments@bristoldental.ca', type: 'generic' }];
+            return { ok: true, status: 200, json: async () => ({ data: { emails }, meta: { results: 3 } }) };
+        },
+    },
+);
+assert.deepEqual(pageCalls, [0, 2], 'paginates with offset');
+const bristolLead = buildLead({ name: 'Bristol Dental Clinic', website: 'https://bristoldental.ca' }, bristol.sites.bristol);
+assert.equal(bristolLead.emailCount, 3);
+assert.ok(bristolLead.allEmails.includes('hr@bristoldental.ca'), 'previously hidden email is exported');
+assert.equal(bristolLead.ownerName, null, 'generic email does not create a fictitious owner');
+assert.equal(bristolLead.emailContacts.length, 3);
+
+// An article author is not the owner of the practice.
+const authorOnly = mergeSiteResults([{
+    ...extractFromHtml('<script type="application/ld+json">{"@type":"Article","author":{"@type":"Person","name":"Zainab Mahdi"}}</script>', 'https://bristoldental.ca/'),
+    url: 'https://bristoldental.ca/', isHomepage: true,
+}], 'https://bristoldental.ca/');
+assert.equal(authorOnly.owner, null, 'an Article author must not be labelled as owner');

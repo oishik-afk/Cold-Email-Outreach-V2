@@ -36,9 +36,10 @@ const input = {
     websiteMaxConcurrency: raw.websiteMaxConcurrency ?? 10,
     headless: raw.headless ?? true,
     hunterApiKey: raw.hunterApiKey || process.env.HUNTER_API_KEY || null,
-    hunterMode: raw.hunterMode || 'fallback', // off | fallback | always
+    hunterMode: raw.hunterMode || 'always', // off | fallback | always
     hunterFindOwnerEmail: raw.hunterFindOwnerEmail ?? true,
-    hunterLimit: raw.hunterLimit ?? 10,
+    hunterLimit: raw.hunterLimit ?? 100,
+    hunterMaxEmails: raw.hunterMaxEmails ?? 100,
 };
 if (input.hunterMode !== 'off' && !input.hunterApiKey) {
     log.warning('No Hunter API key provided (input "hunterApiKey" or env HUNTER_API_KEY) — Hunter enrichment is off.');
@@ -174,6 +175,7 @@ if (input.scrapeWebsites && withSite.length) {
             mode: input.hunterMode,
             findOwnerEmail: input.hunterFindOwnerEmail,
             limit: input.hunterLimit,
+            maxEmails: input.hunterMaxEmails,
             cache: state.hunterCache,
             log,
             onProgress: (done, total) => Actor.setStatusMessage(`Hunter: ${done}/${total} domains`),

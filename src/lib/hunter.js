@@ -26,6 +26,8 @@ const PLATFORM_DOMAINS = new Set([
 const SENIORITY_RANK = { executive: 3, senior: 2, junior: 0 };
 const DEPT_RANK = { executive: 2, management: 1.5, marketing: 1, sales: 0.5 };
 const OWNER_POSITION_RE = /\b(owner|co-?owner|founder|co-?founder|ceo|chief executive|president|proprietor|managing (director|partner)|principal|partner|director|general manager)\b/i;
+const STRICT_OWNER_RE = /\b(owner|co-?owner|founder|co-?founder|ceo|chief executive|president|proprietor|managing (director|partner)|principal (dentist|doctor|physician|broker)|managing partner)\b/i;
+const validEmail = (email) => /^[a-z0-9][a-z0-9._%+-]*@(?:[a-z0-9-]+\.)+[a-z]{2,24}$/i.test(email || '');
 
 /** "https://www.shop.brightsmile.co.uk/about" -> "brightsmile.co.uk" (null for platforms / junk). */
 export function domainForHunter(url) {
@@ -104,19 +106,40 @@ export class HunterClient {
         return null;
     }
 
-    /** Domain Search: people + emails Hunter has indexed for the domain. */
-    async domainSearch(domain, { limit = 10, type = null, seniority = null, department = null } = {}) {
-        const body = await this.request('domain-search', { domain, limit, type, seniority, department });
-        if (!body) return null;
-        this.stats.domainSearches += 1;
-        const d = body.data || {};
+    /** Fetch all pages, up to a configured cap; Hunter returns at most 100 emails per request. */
+    async domainSearch(domain, { limit = 100, maxEmails = limit, type = null, seniority = null, department = null } = {}) {
+        const cap = Math.min(1000, Math.max(1, Number(maxEmails) || 100));
+        const pageSize = Math.min(100, Math.max(1, Number(limit) || 100));
+        const found = new Map();
+        let offset = 0;
+        let totalResults = null;
+        let organization = null, pattern = null, acceptAll = null;
+        while (offset < cap && !this.disabled) {
+            const count = Math.min(pageSize, cap - offset);
+            const body = await this.request('domain-search', { domain, limit: count, offset, type, seniority, department });
+            if (!body) break;
+            this.stats.domainSearches += 1;
+            const data = body.data || {};
+            organization ??= data.organization || null;
+            pattern ??= data.pattern || null;
+            acceptAll ??= data.accept_all ?? null;
+            totalResults = body.meta?.results ?? totalResults;
+            const batch = data.emails || [];
+            for (const raw of batch) {
+                const email = normaliseHunterEmail(raw);
+                if (email && email.verification !== 'invalid') {
+                    found.set(email.email, { ...(found.get(email.email) || {}), ...email });
+                }
+            }
+            offset += batch.length;
+            if (batch.length < count || (totalResults != null && offset >= totalResults)) break;
+        }
+        if (!this.stats.domainSearches) return null;
         return {
-            domain,
-            organization: d.organization || null,
-            pattern: d.pattern || null, // e.g. "{first}.{last}"
-            acceptAll: d.accept_all ?? null,
-            totalResults: body.meta?.results ?? null,
-            emails: (d.emails || []).map(normaliseHunterEmail).filter(Boolean),
+            domain, organization, pattern, acceptAll, totalResults,
+            fetchedResults: found.size,
+            truncated: totalResults != null ? totalResults > offset : offset >= cap,
+            emails: [...found.values()],
         };
     }
 
@@ -135,7 +158,7 @@ export class HunterClient {
 }
 
 function normaliseHunterEmail(e) {
-    if (!e?.value) return null;
+    if (!e?.value || !validEmail(String(e.value).trim())) return null;
     const name = [e.first_name, e.last_name].filter(Boolean).join(' ').trim() || null;
     return {
         email: String(e.value).toLowerCase(),
@@ -147,7 +170,9 @@ function normaliseHunterEmail(e) {
         department: e.department || null,
         linkedin: e.linkedin || null,
         phone: e.phone_number || null,
-        verification: e.verification?.status || null, // "valid" | "accept_all" | "unknown" | ...
+        verification: e.verification?.status || null,
+        provenance: e.provenance || null,
+        decisionMaker: e.decision_maker === true, // "valid" | "accept_all" | "unknown" | ...
     };
 }
 
@@ -156,6 +181,7 @@ export function decisionMakerScore(p) {
     if (!p.name) return -1;
     let s = (SENIORITY_RANK[p.seniority] ?? 1) + (DEPT_RANK[p.department] ?? 0);
     if (p.position && OWNER_POSITION_RE.test(p.position)) s += 3;
+    if (p.decisionMaker) s += 1;
     if (p.verification === 'valid') s += 0.5;
     s += (p.confidence ?? 50) / 100;
     return s;
@@ -197,8 +223,10 @@ export function applyHunter(site, hunter, finderResult = null) {
             owner.title ??= match.position;
         }
     }
-    const bestHunter = named[0];
-    const websiteOwnerWeak = !owner || (owner.confidence ?? 0) < 0.6;
+    // A person is not automatically the owner just because they are senior or the only named contact.
+    const likelyOwners = named.filter((p) => p.position && STRICT_OWNER_RE.test(p.position));
+    const bestHunter = likelyOwners[0];
+    const websiteOwnerWeak = !owner || (owner.confidence ?? 0) < 0.6 || !owner.title;
     if (bestHunter && websiteOwnerWeak && decisionMakerScore(bestHunter) >= 2) {
         if (owner) out.ownerCandidates = [...(out.ownerCandidates || []), owner];
         owner = {
@@ -212,6 +240,7 @@ export function applyHunter(site, hunter, finderResult = null) {
         };
     }
     out.owner = owner;
+    out.hunterContacts = people.map((p) => ({ ...p, source: 'hunter' }));
     out.ownerCandidates = [
         ...(out.ownerCandidates || []),
         ...named.filter((p) => p.name !== owner?.name).map((p) => ({
@@ -224,6 +253,8 @@ export function applyHunter(site, hunter, finderResult = null) {
         pattern: hunter?.pattern || null,
         acceptAll: hunter?.acceptAll ?? null,
         resultsCount: people.length,
+        availableResults: hunter?.totalResults ?? null,
+        truncated: hunter?.truncated ?? false,
     };
     return out;
 }
@@ -243,11 +274,13 @@ export function needsHunter(site, mode) {
  * @returns {Promise<{ sites: Record<string, object>, stats: object }>} placeKey -> updated site data
  */
 export async function enrichWithHunter(places, sites, {
-    apiKey, mode = 'fallback', findOwnerEmail = true, limit = 10, concurrency = 4, cache = {}, log = console,
+    apiKey, mode = 'always', findOwnerEmail = true, limit = 100, maxEmails = 100, concurrency = 4, cache = {}, log = console,
     onProgress = null, fetchImpl,
 }) {
     const client = new HunterClient({ apiKey, log, fetchImpl });
     const out = { ...sites };
+    // Cache the full response by domain and query settings, not just the domain.
+    // Otherwise a previous 10-email lookup could mask a later 100-email lookup.
     const jobs = [];
     let skipped = 0;
     for (const p of places) {
@@ -271,7 +304,7 @@ export async function enrichWithHunter(places, sites, {
     const worker = async () => {
         while (jobs.length && !client.disabled) {
             const { place, site, domain } = jobs.shift();
-            const hunter = await once(domain, () => client.domainSearch(domain, { limit }));
+            const hunter = await once(`domain:${domain}:limit:${limit}:max:${maxEmails}`, () => client.domainSearch(domain, { limit, maxEmails }));
 
             // Owner name from website but no email for them anywhere -> Email Finder.
             let finder = null;
